@@ -69,7 +69,6 @@ type Builder struct {
 	ModeFloat ModeFloat
 	err       error
 	result    []byte
-	offset    int
 }
 
 func NewBuilder(buffer []byte) *Builder {
@@ -90,7 +89,11 @@ func (b *Builder) Bytes() ([]byte, error) {
 	if b.err != nil {
 		return nil, b.err
 	}
-	return b.result[b.offset:], nil
+	return b.result, nil
+}
+
+func (b *Builder) Len() int {
+	return len(b.result)
 }
 
 func (b *Builder) add(bytes ...byte) {
