@@ -367,8 +367,16 @@ func (b *Builder) AddTagHeader(length int) {
 }
 
 type MapItem struct {
-	Key   []byte
-	Value []byte
+	KeyLength int
+	Data      []byte
+}
+
+func (m MapItem) Key() []byte {
+	return m.Data[:m.KeyLength]
+}
+
+func (m MapItem) Value() []byte {
+	return m.Data[m.KeyLength:]
 }
 
 type BytewiseSorter []MapItem
@@ -382,7 +390,7 @@ func (x BytewiseSorter) Swap(i, j int) {
 }
 
 func (x BytewiseSorter) Less(i, j int) bool {
-	return bytes.Compare(x[i].Key, x[j].Key) <= 0
+	return bytes.Compare(x[i].Key(), x[j].Key()) <= 0
 }
 
 type LengthFirstSorter []MapItem
@@ -396,8 +404,8 @@ func (x LengthFirstSorter) Swap(i, j int) {
 }
 
 func (x LengthFirstSorter) Less(i, j int) bool {
-	if len(x[i].Key) != len(x[j].Key) {
-		return len(x[i].Key) < len(x[j].Key)
+	if len(x[i].Key()) != len(x[j].Key()) {
+		return len(x[i].Key()) < len(x[j].Key())
 	}
-	return bytes.Compare(x[i].Key, x[j].Key) <= 0
+	return bytes.Compare(x[i].Key(), x[j].Key()) <= 0
 }
