@@ -53,37 +53,37 @@ const (
 type ModeFloat int
 
 const (
-	// ModeFloatNone makes float values encode without any conversion.
-	// E.g. a float32 in Go will encode to CBOR float32.  And
-	// a float64 in Go will encode to CBOR float64.
-	ModeFloatNone ModeFloat = iota
-
 	// ModeFloat16 specifies float16 as the shortest form that preserves value.
 	// E.g. if float64 can convert to float32 while preserving value, then
 	// encoding will also try to convert float32 to float16.  So a float64 might
 	// encode as CBOR float64, float32 or float16 depending on the value.
-	ModeFloat16
+	ModeFloat16 ModeFloat = iota
+
+	// ModeFloatNone makes float values encode without any conversion.
+	// E.g. a float32 in Go will encode to CBOR float32.  And
+	// a float64 in Go will encode to CBOR float64.
+	ModeFloatNone
 )
 
 // ModeSort identifies supported sorting order.
 type ModeSort int
 
 const (
-	// ModeSortNone means no sorting.
-	ModeSortNone ModeSort = 0
-
 	// ModeSortLengthFirst causes map keys or struct fields to be sorted such that:
 	//     - If two keys have different lengths, the shorter one sorts earlier;
 	//     - If two keys have the same length, the one with the lower value in
 	//       (byte-wise) lexical order sorts earlier.
 	// It is used in "Canonical CBOR" encoding in RFC 7049 3.9.
-	ModeSortLengthFirst ModeSort = 1
+	ModeSortLengthFirst ModeSort = iota
 
 	// ModeSortBytewiseLexical causes map keys or struct fields to be sorted in the
 	// bytewise lexicographic order of their deterministic CBOR encodings.
 	// It is used in "CTAP2 Canonical CBOR" and "Core Deterministic Encoding"
 	// in RFC 7049bis.
-	ModeSortBytewiseLexical ModeSort = 2
+	ModeSortBytewiseLexical
+
+	// ModeSortNone means no sorting.
+	ModeSortNone
 )
 
 type Builder struct {
@@ -427,9 +427,8 @@ func (b *Builder) AddTag(number uint) {
 }
 
 type mapItem struct {
-	offset      int
-	keyLength   int
-	valueLength int
+	offset    int
+	keyLength int
 }
 
 func (b *Builder) sort() {
@@ -439,7 +438,11 @@ func (b *Builder) sort() {
 	}
 	itemFn := func(i int) []byte {
 		mi := b.offsets[i]
-		return b.result[mi.offset : mi.offset+mi.keyLength+mi.valueLength]
+		max := len(b.result)
+		if i < b.mapSize-1 {
+			max = b.offsets[i+1].offset
+		}
+		return b.result[mi.offset:max]
 	}
 	x := keyFn(b.mapSize - 1)
 	idx := sort.Search(b.mapSize-1, func(i int) bool {
@@ -462,9 +465,8 @@ func (b *Builder) sort() {
 		for i := b.mapSize - 1; i > idx; i-- {
 			prev := b.offsets[i-1]
 			b.offsets[i] = mapItem{
-				offset:      prev.offset + len(last),
-				keyLength:   prev.keyLength,
-				valueLength: prev.valueLength,
+				offset:    prev.offset + len(last),
+				keyLength: prev.keyLength,
 			}
 		}
 		lastOffset.offset = newOffset
@@ -478,9 +480,8 @@ func (b *Builder) AddMapItem(k, v func(*Builder)) {
 	keyLength := b.Len() - offset
 	v(b)
 	b.offsets[b.mapSize] = mapItem{
-		offset:      offset,
-		keyLength:   keyLength,
-		valueLength: b.Len() - offset - keyLength,
+		offset:    offset,
+		keyLength: keyLength,
 	}
 	b.mapSize++
 	if b.ModeSort != ModeSortNone {
