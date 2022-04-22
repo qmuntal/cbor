@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"reflect"
 	"sort"
 
 	"github.com/x448/float16"
@@ -165,6 +166,239 @@ func (b *Builder) addUnknown(t byte, fn func(*Builder)) {
 	}
 }
 
+func (b *Builder) Add(v interface{}) {
+	if b.err != nil {
+		return
+	}
+	switch v := v.(type) {
+	case *bool:
+		b.AddBool(*v)
+	case bool:
+		b.AddBool(v)
+	case []bool:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddBool(x)
+			}
+		})
+	case *int8:
+		b.AddInt8(*v)
+	case int8:
+		b.AddInt8(v)
+	case []int8:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddInt8(x)
+			}
+		})
+	case *uint8:
+		b.AddUint8(*v)
+	case uint8:
+		b.AddUint8(v)
+	case []uint8:
+		b.AddBytes(v)
+	case *int16:
+		b.AddInt16(*v)
+	case int16:
+		b.AddInt16(v)
+	case []int16:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddInt16(x)
+			}
+		})
+	case *uint16:
+		b.AddUint16(*v)
+	case uint16:
+		b.AddUint16(v)
+	case []uint16:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddUint16(x)
+			}
+		})
+	case *int32:
+		b.AddInt32(*v)
+	case int32:
+		b.AddInt32(v)
+	case []int32:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddInt32(x)
+			}
+		})
+	case *uint32:
+		b.AddUint32(*v)
+	case uint32:
+		b.AddUint32(v)
+	case []uint32:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddUint32(x)
+			}
+		})
+	case *int64:
+		b.AddInt64(*v)
+	case int64:
+		b.AddInt64(v)
+	case []int64:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddInt64(x)
+			}
+		})
+	case *uint64:
+		b.AddUint64(*v)
+	case uint64:
+		b.AddUint64(v)
+	case []uint64:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddUint64(x)
+			}
+		})
+	case *float32:
+		b.AddFloat32(*v)
+	case float32:
+		b.AddFloat32(v)
+	case []float32:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddFloat32(x)
+			}
+		})
+	case *float64:
+		b.AddFloat64(*v)
+	case float64:
+		b.AddFloat64(v)
+	case []float64:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.AddFloat64(x)
+			}
+		})
+	case *string:
+		b.AddString(*v)
+	case string:
+		b.AddString(v)
+	case []interface{}:
+		b.AddArray(uint64(len(v)), func(b *Builder) {
+			for _, x := range v {
+				b.Add(x)
+			}
+		})
+	case map[interface{}]interface{}:
+		b.AddMap(len(v))
+		for k, v := range v {
+			b.AddMapItem(func(b *Builder) {
+				b.Add(k)
+			}, func(b *Builder) {
+				b.Add(v)
+			})
+		}
+	default:
+		// Fallback to reflect-based encoding.
+		b.value(reflect.Indirect(reflect.ValueOf(v)))
+	}
+}
+
+func (b *Builder) value(v reflect.Value) {
+	if b.err != nil {
+		return
+	}
+	k := v.Kind()
+	switch k {
+	case reflect.String:
+		b.AddString(v.String())
+	case reflect.Array, reflect.Slice:
+		l := v.Len()
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			if k == reflect.Slice && v.IsNil() {
+				b.AddNil()
+				break
+			}
+			if l == 0 {
+				b.addUint8(cborTypeByteString, 0)
+				break
+			}
+			b.addUint64(cborTypeByteString, uint64(l))
+			for i := 0; i < l; i++ {
+				b.add(byte(v.Index(i).Uint()))
+			}
+
+		} else {
+			b.AddArray(uint64(l), func(b *Builder) {
+				for i := 0; i < l; i++ {
+					b.value(v.Index(i))
+				}
+			})
+		}
+	case reflect.Map:
+		if v.IsNil() {
+			b.AddNil()
+			break
+		}
+		l := v.Len()
+		b.AddMap(l)
+		iter := v.MapRange()
+		for iter.Next() {
+			b.AddMapItem(func(b *Builder) {
+				b.value(iter.Key())
+			}, func(b *Builder) {
+				b.value(iter.Value())
+			})
+		}
+	case reflect.Struct:
+		t := v.Type()
+		l := v.NumField()
+		b.AddArray(uint64(l), func(b *Builder) {
+			for i := 0; i < l; i++ {
+				if v := v.Field(i); v.CanSet() || t.Field(i).Name != "_" {
+					b.value(v)
+				}
+			}
+		})
+
+	case reflect.Bool:
+		b.AddBool(v.Bool())
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		b.AddInt64(v.Int())
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		b.AddUint64(v.Uint())
+
+	case reflect.Float32, reflect.Float64:
+		switch v.Type().Kind() {
+		case reflect.Float32:
+			b.AddFloat32(float32(v.Float()))
+		case reflect.Float64:
+			b.AddFloat64(v.Float())
+		}
+
+	case reflect.Complex64, reflect.Complex128:
+		b.AddArray(2, func(b *Builder) {
+			switch v.Type().Kind() {
+			case reflect.Complex64:
+				x := v.Complex()
+				b.AddFloat32(float32(real(x)))
+				b.AddFloat32(float32(imag(x)))
+			case reflect.Complex128:
+				x := v.Complex()
+				b.AddFloat64(float64(real(x)))
+			}
+		})
+	case reflect.Interface:
+		if v.IsNil() {
+			b.AddNil()
+			break
+		}
+		b.value(v.Elem())
+	default:
+		b.SetError(errors.New("cbor: invalid type" + v.Type().Name()))
+	}
+}
+
 func (b *Builder) AddRawBytes(v []byte) {
 	b.add(v...)
 }
@@ -186,24 +420,30 @@ func (b *Builder) addUint8(t uint8, v uint8) {
 }
 
 func (b *Builder) addUint16(t uint8, v uint16) {
-	if v <= 23 {
-		b.add(t | byte(v))
+	if v <= math.MaxUint8 {
+		b.addUint8(t, uint8(v))
 	} else {
 		b.add(t|byte(25), byte(v>>8), byte(v))
 	}
 }
 
 func (b *Builder) addUint32(t uint8, v uint32) {
-	if v <= 23 {
-		b.add(t | byte(v))
+	if v <= math.MaxUint8 {
+		b.addUint8(t, uint8(v))
+	} else if v <= math.MaxUint16 {
+		b.addUint16(t, uint16(v))
 	} else {
 		b.add(t|byte(26), byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 	}
 }
 
 func (b *Builder) addUint64(t uint8, v uint64) {
-	if v <= 23 {
-		b.add(t | byte(v))
+	if v <= math.MaxUint8 {
+		b.addUint8(t, uint8(v))
+	} else if v <= math.MaxUint16 {
+		b.addUint16(t, uint16(v))
+	} else if v <= math.MaxUint32 {
+		b.addUint32(t, uint32(v))
 	} else {
 		b.add(
 			t|byte(27),
@@ -245,24 +485,6 @@ func (b *Builder) AddInt64(v int64) {
 	}
 }
 
-func (b *Builder) AddInt(v int) {
-	if v >= 0 {
-		b.AddUint(uint(v))
-	} else {
-		const t = cborTypeNegativeInt
-		v = v*(-1) - 1
-		if v <= math.MaxUint8 {
-			b.addUint8(t, uint8(v))
-		} else if v <= math.MaxUint16 {
-			b.addUint16(t, uint16(v))
-		} else if v <= math.MaxUint32 {
-			b.addUint32(t, uint32(v))
-		} else {
-			b.addUint64(t, uint64(v))
-		}
-	}
-}
-
 func (b *Builder) AddUint8(v uint8) {
 	b.addUint8(cborTypePositiveInt, v)
 }
@@ -277,22 +499,6 @@ func (b *Builder) AddUint32(v uint32) {
 
 func (b *Builder) AddUint64(v uint64) {
 	b.addUint64(cborTypePositiveInt, v)
-}
-
-func (b *Builder) addUint(t byte, v uint) {
-	if v <= math.MaxUint8 {
-		b.addUint8(t, uint8(v))
-	} else if v <= math.MaxUint16 {
-		b.addUint16(t, uint16(v))
-	} else if v <= math.MaxUint32 {
-		b.addUint32(t, uint32(v))
-	} else {
-		b.addUint64(t, uint64(v))
-	}
-}
-
-func (b *Builder) AddUint(v uint) {
-	b.addUint(cborTypePositiveInt, v)
 }
 
 func (b *Builder) addFloat16(v float16.Float16) {
@@ -388,7 +594,7 @@ func (b *Builder) AddBytes(v []byte) {
 		b.add(cborTypeByteString)
 		return
 	}
-	b.addUint(cborTypeByteString, uint(len(v)))
+	b.addUint64(cborTypeByteString, uint64(len(v)))
 	b.add(v...)
 }
 
@@ -401,7 +607,7 @@ func (b *Builder) AddString(v string) {
 		b.add(cborTypeTextString)
 		return
 	}
-	b.addUint(cborTypeTextString, uint(len(v)))
+	b.addUint64(cborTypeTextString, uint64(len(v)))
 	b.add([]byte(v)...)
 }
 
@@ -409,21 +615,21 @@ func (b *Builder) AddNil() {
 	b.add(cborNil)
 }
 
-func (b *Builder) AddArray(n uint, fn func(*Builder)) {
-	b.addUint(cborTypeArray, n)
+func (b *Builder) AddArray(n uint64, fn func(*Builder)) {
+	b.addUint64(cborTypeArray, n)
 	fn(b)
 }
 
 func (b *Builder) AddMap(length int) {
 	b.mapSize = 0
-	b.addUint(cborTypeMap, uint(length))
+	b.addUint64(cborTypeMap, uint64(length))
 	if len(b.offsets) < length {
 		b.offsets = append(b.offsets, make([]mapItem, length-len(b.offsets))...)
 	}
 }
 
-func (b *Builder) AddTag(number uint) {
-	b.addUint(cborTypeTag, number)
+func (b *Builder) AddTag(number uint64) {
+	b.addUint64(cborTypeTag, number)
 }
 
 type mapItem struct {
