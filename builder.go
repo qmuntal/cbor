@@ -2,8 +2,10 @@ package cbor
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"math"
+	"sort"
 
 	"github.com/x448/float16"
 )
@@ -63,12 +65,37 @@ const (
 	ModeFloat16
 )
 
+// ModeSort identifies supported sorting order.
+type ModeSort int
+
+const (
+	// ModeSortNone means no sorting.
+	ModeSortNone ModeSort = 0
+
+	// ModeSortLengthFirst causes map keys or struct fields to be sorted such that:
+	//     - If two keys have different lengths, the shorter one sorts earlier;
+	//     - If two keys have the same length, the one with the lower value in
+	//       (byte-wise) lexical order sorts earlier.
+	// It is used in "Canonical CBOR" encoding in RFC 7049 3.9.
+	ModeSortLengthFirst ModeSort = 1
+
+	// ModeSortBytewiseLexical causes map keys or struct fields to be sorted in the
+	// bytewise lexicographic order of their deterministic CBOR encodings.
+	// It is used in "CTAP2 Canonical CBOR" and "Core Deterministic Encoding"
+	// in RFC 7049bis.
+	ModeSortBytewiseLexical ModeSort = 2
+)
+
 type Builder struct {
 	ModeNaN   ModeNaN
 	ModeInf   ModeInf
 	ModeFloat ModeFloat
+	ModeSort  ModeSort
 	err       error
 	result    []byte
+	offsets   []mapItem
+	tmp       []byte
+	mapSize   int
 }
 
 func NewBuilder(buffer []byte) *Builder {
@@ -106,6 +133,42 @@ func (b *Builder) add(bytes ...byte) {
 	b.result = append(b.result, bytes...)
 }
 
+func (b *Builder) addUnknown(t byte, fn func(*Builder)) {
+	offset := b.Len()
+	b.addUint8(t, 0)
+	fn(b)
+	length := b.Len() - offset - 1
+	if length <= 23 {
+		b.result[offset] = t | byte(length)
+	} else {
+		if length <= math.MaxUint8 {
+			b.add(0)
+			copy(b.result[offset+1+1:], b.result[offset+1:])
+			b.result[offset] = t | byte(24)
+			b.result[offset+1] = byte(length)
+		} else if length <= math.MaxUint16 {
+			b.add(0, 0)
+			copy(b.result[offset+1+2:], b.result[offset+1:])
+			b.result[offset] = t | byte(25)
+			binary.BigEndian.PutUint16(b.result[offset+1:], uint16(length))
+		} else if length <= math.MaxUint32 {
+			b.add(0, 0, 0, 0)
+			copy(b.result[offset+1+4:], b.result[offset+1:])
+			b.result[offset] = t | byte(26)
+			binary.BigEndian.PutUint32(b.result[offset+1:], uint32(length))
+		} else {
+			b.add(0, 0, 0, 0, 0, 0, 0, 0)
+			copy(b.result[offset+1+8:], b.result[offset+1:])
+			b.result[offset] = t | byte(27)
+			binary.BigEndian.PutUint64(b.result[offset+1:], uint64(length))
+		}
+	}
+}
+
+func (b *Builder) AddRawBytes(v []byte) {
+	b.add(v...)
+}
+
 func (b *Builder) AddBool(v bool) {
 	d := cborFalse
 	if v {
@@ -118,7 +181,7 @@ func (b *Builder) addUint8(t uint8, v uint8) {
 	if v <= 23 {
 		b.add(t | v)
 	} else {
-		b.add(t | byte(24))
+		b.add(t|byte(24), v)
 	}
 }
 
@@ -329,9 +392,13 @@ func (b *Builder) AddBytes(v []byte) {
 	b.add(v...)
 }
 
+func (b *Builder) AddBytesUnknownLength(fn func(*Builder)) {
+	b.addUnknown(cborTypeByteString, fn)
+}
+
 func (b *Builder) AddString(v string) {
 	if len(v) == 0 {
-		b.add(cborTypeByteString)
+		b.add(cborTypeTextString)
 		return
 	}
 	b.addUint(cborTypeTextString, uint(len(v)))
@@ -342,70 +409,81 @@ func (b *Builder) AddNil() {
 	b.add(cborNil)
 }
 
-func (b *Builder) AddSliceHeader(length int) {
-	if length == 0 {
-		b.add(cborTypeArray)
-		return
-	}
-	b.addUint(cborTypeArray, uint(length))
+func (b *Builder) AddArray(n uint, fn func(*Builder)) {
+	b.addUint(cborTypeArray, n)
+	fn(b)
 }
 
-func (b *Builder) AddMapHeader(length int) {
-	if length == 0 {
-		b.add(cborTypeMap)
-		return
-	}
+func (b *Builder) AddMap(length int) {
+	b.mapSize = 0
 	b.addUint(cborTypeMap, uint(length))
-}
-
-func (b *Builder) AddTagHeader(length int) {
-	if length == 0 {
-		b.add(cborTypeTag)
-		return
+	if len(b.offsets) < length {
+		b.offsets = append(b.offsets, make([]mapItem, length-len(b.offsets))...)
 	}
-	b.addUint(cborTypeTag, uint(length))
 }
 
-type MapItem struct {
-	KeyLength int
-	Data      []byte
+func (b *Builder) AddTag(number uint) {
+	b.addUint(cborTypeTag, number)
 }
 
-func (m MapItem) Key() []byte {
-	return m.Data[:m.KeyLength]
+type mapItem struct {
+	offset      int
+	keyLength   int
+	valueLength int
 }
 
-func (m MapItem) Value() []byte {
-	return m.Data[m.KeyLength:]
-}
-
-type BytewiseSorter []MapItem
-
-func (x BytewiseSorter) Len() int {
-	return len(x)
-}
-
-func (x BytewiseSorter) Swap(i, j int) {
-	x[i], x[j] = x[j], x[i]
-}
-
-func (x BytewiseSorter) Less(i, j int) bool {
-	return bytes.Compare(x[i].Key(), x[j].Key()) <= 0
-}
-
-type LengthFirstSorter []MapItem
-
-func (x LengthFirstSorter) Len() int {
-	return len(x)
-}
-
-func (x LengthFirstSorter) Swap(i, j int) {
-	x[i], x[j] = x[j], x[i]
-}
-
-func (x LengthFirstSorter) Less(i, j int) bool {
-	if len(x[i].Key()) != len(x[j].Key()) {
-		return len(x[i].Key()) < len(x[j].Key())
+func (b *Builder) sort() {
+	keyFn := func(i int) []byte {
+		mi := b.offsets[i]
+		return b.result[mi.offset : mi.offset+mi.keyLength]
 	}
-	return bytes.Compare(x[i].Key(), x[j].Key()) <= 0
+	itemFn := func(i int) []byte {
+		mi := b.offsets[i]
+		return b.result[mi.offset : mi.offset+mi.keyLength+mi.valueLength]
+	}
+	x := keyFn(b.mapSize - 1)
+	idx := sort.Search(b.mapSize-1, func(i int) bool {
+		y := keyFn(i)
+		if b.ModeSort == ModeSortLengthFirst && len(x) != len(y) {
+			return len(x) < len(y)
+		}
+		return bytes.Compare(x, y) <= 0
+	})
+	if idx < b.mapSize-1 {
+		last := itemFn(b.mapSize - 1)
+		if len(b.tmp) < len(last) {
+			b.tmp = append(b.tmp, make([]byte, len(last)-len(b.tmp))...)
+		}
+		newOffset := b.offsets[idx].offset
+		copy(b.tmp, last)
+		copy(b.result[newOffset+len(last):], b.result[newOffset:])
+		copy(b.result[newOffset:], b.tmp[:len(last)])
+		lastOffset := b.offsets[b.mapSize-1]
+		for i := b.mapSize - 1; i > idx; i-- {
+			prev := b.offsets[i-1]
+			b.offsets[i] = mapItem{
+				offset:      prev.offset + len(last),
+				keyLength:   prev.keyLength,
+				valueLength: prev.valueLength,
+			}
+		}
+		lastOffset.offset = newOffset
+		b.offsets[idx] = lastOffset
+	}
+}
+
+func (b *Builder) AddMapItem(k, v func(*Builder)) {
+	offset := b.Len()
+	k(b)
+	keyLength := b.Len() - offset
+	v(b)
+	b.offsets[b.mapSize] = mapItem{
+		offset:      offset,
+		keyLength:   keyLength,
+		valueLength: b.Len() - offset - keyLength,
+	}
+	b.mapSize++
+	if b.ModeSort != ModeSortNone {
+		b.sort()
+	}
 }
