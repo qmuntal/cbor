@@ -99,15 +99,16 @@ func Marshal(v interface{}) ([]byte, error) {
 type BuilderContinuation func(*Builder)
 
 type Builder struct {
-	ModeNaN   ModeNaN
-	ModeInf   ModeInf
-	ModeFloat ModeFloat
-	ModeSort  ModeSort
-	err       error
-	result    []byte
-	offsets   []mapItem
-	tmp       []byte
-	mapSize   int
+	ModeNaN    ModeNaN
+	ModeInf    ModeInf
+	ModeFloat  ModeFloat
+	ModeSort   ModeSort
+	err        error
+	result     []byte
+	offsets    []mapItem
+	tmp        []byte
+	mapSize    int
+	mapMaxSize int
 }
 
 func NewBuilder(buffer []byte) *Builder {
@@ -843,10 +844,29 @@ func (b *Builder) AddMap(length int) {
 		b.add(cborTypeMap)
 		return
 	}
+	b.mapMaxSize = length
 	b.mapSize = 0
 	b.addUint64(cborTypeMap, uint64(length))
 	if len(b.offsets) < length {
 		b.offsets = append(b.offsets, make([]mapItem, length-len(b.offsets))...)
+	}
+}
+
+func (b *Builder) AddMapItem(k, v BuilderContinuation) {
+	if b.mapSize >= b.mapMaxSize {
+		panic("item does not fit in the map")
+	}
+	offset := b.Len()
+	k(b)
+	keyLength := b.Len() - offset
+	v(b)
+	b.offsets[b.mapSize] = mapItem{
+		offset:    offset,
+		keyLength: keyLength,
+	}
+	b.mapSize++
+	if b.ModeSort != ModeSortNone {
+		b.sort()
 	}
 }
 
@@ -899,20 +919,5 @@ func (b *Builder) sort() {
 		}
 		lastOffset.offset = newOffset
 		b.offsets[idx] = lastOffset
-	}
-}
-
-func (b *Builder) AddMapItem(k, v BuilderContinuation) {
-	offset := b.Len()
-	k(b)
-	keyLength := b.Len() - offset
-	v(b)
-	b.offsets[b.mapSize] = mapItem{
-		offset:    offset,
-		keyLength: keyLength,
-	}
-	b.mapSize++
-	if b.ModeSort != ModeSortNone {
-		b.sort()
 	}
 }
