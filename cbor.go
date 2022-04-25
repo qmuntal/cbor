@@ -17,13 +17,14 @@ const (
 	cborTypePrimitives  uint8 = 0xe0
 )
 
-type Marshaler interface {
-	MarshalCBOR(*Builder)
+// A MarshalingValue marshals itself into a Builder.
+type MarshalingValue interface {
+	MarshalCBORValue(*Builder) error
 }
 
 type RawBytes []byte
 
-func (r RawBytes) MarshalCBOR(b *Builder) {
+func (r RawBytes) MarshalCBORValue(b *Builder) {
 	b.AddRawBytes(r)
 }
 
@@ -32,9 +33,10 @@ type Tag struct {
 	Content interface{}
 }
 
-func (t Tag) MarshalCBOR(b *Builder) {
+func (t Tag) MarshalCBORValue(b *Builder) error {
 	b.AddTag(t.Number)
 	b.Marshal(t.Content)
+	return nil
 }
 
 type RawTag struct {
@@ -42,13 +44,14 @@ type RawTag struct {
 	Content RawBytes
 }
 
-func (t RawTag) MarshalCBOR(b *Builder) {
+func (t RawTag) MarshalCBORValue(b *Builder) error {
 	b.AddTag(t.Number)
 	b.AddRawBytes(t.Content)
+	return nil
 }
 
 var (
-	typeMarshaler = reflect.TypeOf((*Marshaler)(nil)).Elem()
-	typeBigInt    = reflect.TypeOf(big.Int{})
-	typeTime      = reflect.TypeOf(time.Time{})
+	typeMarshalingValue = reflect.TypeOf((*MarshalingValue)(nil)).Elem()
+	typeBigInt          = reflect.TypeOf(big.Int{})
+	typeTime            = reflect.TypeOf(time.Time{})
 )

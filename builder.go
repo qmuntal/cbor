@@ -445,11 +445,13 @@ func (b *Builder) Marshal(v interface{}) {
 				})
 			}
 		}
-	case Marshaler:
+	case MarshalingValue:
 		if v == nil {
 			b.AddNil()
 		} else {
-			v.MarshalCBOR(b)
+			if err := v.MarshalCBORValue(b); err != nil {
+				b.SetError(err)
+			}
 		}
 	default:
 		// Fallback to reflect-based encoding.
@@ -492,14 +494,16 @@ func (b *Builder) value(v reflect.Value) {
 		b.AddBytes(bi.Bytes())
 		return
 	}
-	if reflect.PtrTo(t).Implements(typeMarshaler) {
-		m, ok := v.Interface().(Marshaler)
+	if reflect.PtrTo(t).Implements(typeMarshalingValue) {
+		m, ok := v.Interface().(MarshalingValue)
 		if !ok {
 			pv := reflect.New(v.Type())
 			pv.Elem().Set(v)
-			m = pv.Interface().(Marshaler)
+			m = pv.Interface().(MarshalingValue)
 		}
-		m.MarshalCBOR(b)
+		if err := m.MarshalCBORValue(b); err != nil {
+			b.SetError(err)
+		}
 		return
 	}
 	switch k {
@@ -590,6 +594,16 @@ func (b *Builder) value(v reflect.Value) {
 		b.value(v.Elem())
 	default:
 		b.SetError(errors.New("cbor: invalid type" + v.String()))
+	}
+}
+
+// AddValue calls MarshalCBORValue on v, passing a pointer to the builder to append to.
+// If MarshalCBORValue returns an error, it is set on the Builder so that subsequent
+// appends don't have an effect.
+func (b *Builder) AddValue(v MarshalingValue) {
+	err := v.MarshalCBORValue(b)
+	if err != nil {
+		b.err = err
 	}
 }
 
