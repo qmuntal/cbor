@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"math/big"
 	"reflect"
 	"sort"
 
@@ -86,6 +87,12 @@ const (
 	// ModeSortNone means no sorting.
 	ModeSortNone
 )
+
+func Marshal(v interface{}) ([]byte, error) {
+	var b Builder
+	b.Add(v)
+	return b.Bytes()
+}
 
 type Builder struct {
 	ModeNaN   ModeNaN
@@ -171,130 +178,274 @@ func (b *Builder) Add(v interface{}) {
 		return
 	}
 	switch v := v.(type) {
+	case nil:
+		b.AddNil()
 	case *bool:
-		b.AddBool(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddBool(*v)
+		}
 	case bool:
 		b.AddBool(v)
 	case []bool:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddBool(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddBool(x)
+				}
+			})
+		}
 	case *int8:
-		b.AddInt8(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddInt8(*v)
+		}
 	case int8:
 		b.AddInt8(v)
 	case []int8:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddInt8(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddInt8(x)
+				}
+			})
+		}
 	case *uint8:
-		b.AddUint8(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddUint8(*v)
+		}
 	case uint8:
 		b.AddUint8(v)
 	case []uint8:
-		b.AddBytes(v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddBytes(v)
+		}
 	case *int16:
-		b.AddInt16(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddInt16(*v)
+		}
 	case int16:
 		b.AddInt16(v)
 	case []int16:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddInt16(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddInt16(x)
+				}
+			})
+		}
 	case *uint16:
-		b.AddUint16(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddUint16(*v)
+		}
 	case uint16:
 		b.AddUint16(v)
 	case []uint16:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddUint16(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddUint16(x)
+				}
+			})
+		}
 	case *int32:
-		b.AddInt32(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddInt32(*v)
+		}
 	case int32:
 		b.AddInt32(v)
 	case []int32:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddInt32(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddInt32(x)
+				}
+			})
+		}
 	case *uint32:
-		b.AddUint32(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddUint32(*v)
+		}
 	case uint32:
 		b.AddUint32(v)
 	case []uint32:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddUint32(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddUint32(x)
+				}
+			})
+		}
 	case *int64:
-		b.AddInt64(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddInt64(*v)
+		}
 	case int64:
 		b.AddInt64(v)
 	case []int64:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddInt64(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddInt64(x)
+				}
+			})
+		}
 	case *uint64:
-		b.AddUint64(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddUint64(*v)
+		}
 	case uint64:
 		b.AddUint64(v)
 	case []uint64:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddUint64(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddUint64(x)
+				}
+			})
+		}
+	case *int:
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddInt(*v)
+		}
+	case int:
+		b.AddInt(v)
+	case []int:
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddInt(x)
+				}
+			})
+		}
+	case *uint:
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddUint(*v)
+		}
+	case uint:
+		b.AddUint(v)
+	case []uint:
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddUint(x)
+				}
+			})
+		}
 	case *float32:
-		b.AddFloat32(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddFloat32(*v)
+		}
 	case float32:
 		b.AddFloat32(v)
 	case []float32:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddFloat32(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddFloat32(x)
+				}
+			})
+		}
 	case *float64:
-		b.AddFloat64(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddFloat64(*v)
+		}
 	case float64:
 		b.AddFloat64(v)
 	case []float64:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.AddFloat64(x)
-			}
-		})
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.AddFloat64(x)
+				}
+			})
+		}
 	case *string:
-		b.AddString(*v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddString(*v)
+		}
 	case string:
 		b.AddString(v)
 	case []interface{}:
-		b.AddArray(uint64(len(v)), func(b *Builder) {
-			for _, x := range v {
-				b.Add(x)
-			}
-		})
-	case map[interface{}]interface{}:
-		b.AddMap(len(v))
-		for k, v := range v {
-			b.AddMapItem(func(b *Builder) {
-				b.Add(k)
-			}, func(b *Builder) {
-				b.Add(v)
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddArray(uint64(len(v)), func(b *Builder) {
+				for _, x := range v {
+					b.Add(x)
+				}
 			})
+		}
+	case map[interface{}]interface{}:
+		if v == nil {
+			b.AddNil()
+		} else {
+			b.AddMap(len(v))
+			for k, v := range v {
+				b.AddMapItem(func(b *Builder) {
+					b.Add(k)
+				}, func(b *Builder) {
+					b.Add(v)
+				})
+			}
+		}
+	case Marshaler:
+		if v == nil {
+			b.AddNil()
+		} else {
+			v.MarshalCBOR(b)
 		}
 	default:
 		// Fallback to reflect-based encoding.
@@ -307,12 +458,52 @@ func (b *Builder) value(v reflect.Value) {
 		return
 	}
 	k := v.Kind()
+	if !v.IsValid() {
+		b.AddNil()
+		return
+	}
+	t := v.Type()
+	switch t {
+	case typeBigInt:
+		vbi := v.Interface().(big.Int)
+		sign := vbi.Sign()
+		bi := new(big.Int).SetBytes(vbi.Bytes()) // bi is absolute value of v
+		if sign < 0 {
+			// For negative number, convert to CBOR encoded number (-v-1).
+			bi.Sub(bi, big.NewInt(1))
+		}
+		if bi.IsUint64() {
+			if sign >= 0 {
+				b.addUint64(cborTypePositiveInt, bi.Uint64())
+			} else {
+				b.addUint64(cborTypeNegativeInt, bi.Uint64())
+			}
+			return
+		}
+		var tagNum uint64 = 2
+		if sign < 0 {
+			tagNum = 3
+		}
+		b.AddTag(tagNum)
+		b.AddBytes(bi.Bytes())
+		return
+	}
+	if reflect.PtrTo(t).Implements(typeMarshaler) {
+		m, ok := v.Interface().(Marshaler)
+		if !ok {
+			pv := reflect.New(v.Type())
+			pv.Elem().Set(v)
+			m = pv.Interface().(Marshaler)
+		}
+		m.MarshalCBOR(b)
+		return
+	}
 	switch k {
 	case reflect.String:
 		b.AddString(v.String())
 	case reflect.Array, reflect.Slice:
 		l := v.Len()
-		if v.Type().Elem().Kind() == reflect.Uint8 {
+		if t.Elem().Kind() == reflect.Uint8 {
 			if k == reflect.Slice && v.IsNil() {
 				b.AddNil()
 				break
@@ -395,7 +586,7 @@ func (b *Builder) value(v reflect.Value) {
 		}
 		b.value(v.Elem())
 	default:
-		b.SetError(errors.New("cbor: invalid type" + v.Type().Name()))
+		b.SetError(errors.New("cbor: invalid type" + v.String()))
 	}
 }
 
@@ -485,6 +676,10 @@ func (b *Builder) AddInt64(v int64) {
 	}
 }
 
+func (b *Builder) AddInt(v int) {
+	b.AddInt64(int64(v))
+}
+
 func (b *Builder) AddUint8(v uint8) {
 	b.addUint8(cborTypePositiveInt, v)
 }
@@ -501,6 +696,10 @@ func (b *Builder) AddUint64(v uint64) {
 	b.addUint64(cborTypePositiveInt, v)
 }
 
+func (b *Builder) AddUint(v uint) {
+	b.addUint64(cborTypePositiveInt, uint64(v))
+}
+
 func (b *Builder) addFloat16(v float16.Float16) {
 	f := uint16(v)
 	b.add(cborTypePrimitives|byte(25), byte(f>>8), byte(f))
@@ -515,7 +714,7 @@ func (b *Builder) addFloat64(v float64) {
 	f := math.Float64bits(v)
 	b.add(
 		cborTypePrimitives|byte(27),
-		byte(f>>56), byte(f>>48), byte(f>>40), byte(32),
+		byte(f>>56), byte(f>>48), byte(f>>40), byte(f>>32),
 		byte(f>>24), byte(f>>16), byte(f>>8), byte(f),
 	)
 }
