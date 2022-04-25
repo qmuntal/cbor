@@ -432,9 +432,9 @@ func (b *Builder) Add(v interface{}) {
 		if v == nil {
 			b.AddNil()
 		} else {
-			b.AddMap(len(v))
+			fn := b.AddMap(len(v))
 			for k, v := range v {
-				b.AddMapItem(func(b *Builder) {
+				fn(func(b *Builder) {
 					b.Add(k)
 				}, func(b *Builder) {
 					b.Add(v)
@@ -529,11 +529,10 @@ func (b *Builder) value(v reflect.Value) {
 			b.AddNil()
 			break
 		}
-		l := v.Len()
-		b.AddMap(l)
+		fn := b.AddMap(v.Len())
 		iter := v.MapRange()
 		for iter.Next() {
-			b.AddMapItem(func(b *Builder) {
+			fn(func(b *Builder) {
 				b.value(iter.Key())
 			}, func(b *Builder) {
 				b.value(iter.Value())
@@ -819,12 +818,15 @@ func (b *Builder) AddArray(n uint64, fn func(*Builder)) {
 	fn(b)
 }
 
-func (b *Builder) AddMap(length int) {
+type AddMapItemFunc func(fnkey, fnvalue func(*Builder))
+
+func (b *Builder) AddMap(length int) AddMapItemFunc {
 	b.mapSize = 0
 	b.addUint64(cborTypeMap, uint64(length))
 	if len(b.offsets) < length {
 		b.offsets = append(b.offsets, make([]mapItem, length-len(b.offsets))...)
 	}
+	return b.addMapItem
 }
 
 func (b *Builder) AddTag(number uint64) {
@@ -879,7 +881,7 @@ func (b *Builder) sort() {
 	}
 }
 
-func (b *Builder) AddMapItem(k, v func(*Builder)) {
+func (b *Builder) addMapItem(k, v func(*Builder)) {
 	offset := b.Len()
 	k(b)
 	keyLength := b.Len() - offset
