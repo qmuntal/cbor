@@ -24,8 +24,9 @@ type MarshalingValue interface {
 
 type RawBytes []byte
 
-func (r RawBytes) MarshalCBORValue(b *Builder) {
+func (r RawBytes) MarshalCBORValue(b *Builder) error {
 	b.AddRawBytes(r)
+	return nil
 }
 
 type Tag struct {
