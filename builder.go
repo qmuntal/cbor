@@ -90,7 +90,7 @@ const (
 
 func Marshal(v interface{}) ([]byte, error) {
 	var b Builder
-	b.Add(v)
+	b.Marshal(v)
 	return b.Bytes()
 }
 
@@ -177,7 +177,7 @@ func (b *Builder) addUnknown(t byte, fn BuilderContinuation) {
 	}
 }
 
-func (b *Builder) Add(v interface{}) {
+func (b *Builder) Marshal(v interface{}) {
 	if b.err != nil {
 		return
 	}
@@ -428,7 +428,7 @@ func (b *Builder) Add(v interface{}) {
 		} else {
 			b.AddArray(uint64(len(v)), func(b *Builder) {
 				for _, x := range v {
-					b.Add(x)
+					b.Marshal(x)
 				}
 			})
 		}
@@ -439,9 +439,9 @@ func (b *Builder) Add(v interface{}) {
 			fn := b.AddMap(len(v))
 			for k, v := range v {
 				fn(func(b *Builder) {
-					b.Add(k)
+					b.Marshal(k)
 				}, func(b *Builder) {
-					b.Add(v)
+					b.Marshal(v)
 				})
 			}
 		}

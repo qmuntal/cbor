@@ -34,7 +34,7 @@ type Tag struct {
 
 func (t Tag) MarshalCBOR(b *Builder) {
 	b.AddTag(t.Number)
-	b.Add(t.Content)
+	b.Marshal(t.Content)
 }
 
 type RawTag struct {
