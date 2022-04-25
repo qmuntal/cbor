@@ -94,6 +94,10 @@ func Marshal(v interface{}) ([]byte, error) {
 	return b.Bytes()
 }
 
+// BuilderContinuation is a continuation-passing interface
+// for building length-prefixed byte sequences.
+type BuilderContinuation func(*Builder)
+
 type Builder struct {
 	ModeNaN   ModeNaN
 	ModeInf   ModeInf
@@ -141,7 +145,7 @@ func (b *Builder) add(bytes ...byte) {
 	b.result = append(b.result, bytes...)
 }
 
-func (b *Builder) addUnknown(t byte, fn func(*Builder)) {
+func (b *Builder) addUnknown(t byte, fn BuilderContinuation) {
 	offset := b.Len()
 	b.addUint8(t, 0)
 	fn(b)
@@ -796,7 +800,7 @@ func (b *Builder) AddBytes(v []byte) {
 	b.add(v...)
 }
 
-func (b *Builder) AddBytesUnknownLength(fn func(*Builder)) {
+func (b *Builder) AddBytesUnknownLength(fn BuilderContinuation) {
 	b.addUnknown(cborTypeByteString, fn)
 }
 
@@ -813,12 +817,12 @@ func (b *Builder) AddNil() {
 	b.add(cborNil)
 }
 
-func (b *Builder) AddArray(n uint64, fn func(*Builder)) {
+func (b *Builder) AddArray(n uint64, fn BuilderContinuation) {
 	b.addUint64(cborTypeArray, n)
 	fn(b)
 }
 
-type AddMapItemFunc func(fnkey, fnvalue func(*Builder))
+type AddMapItemFunc func(fnkey, fnvalue BuilderContinuation)
 
 func (b *Builder) AddMap(length int) AddMapItemFunc {
 	b.mapSize = 0
@@ -881,7 +885,7 @@ func (b *Builder) sort() {
 	}
 }
 
-func (b *Builder) addMapItem(k, v func(*Builder)) {
+func (b *Builder) addMapItem(k, v BuilderContinuation) {
 	offset := b.Len()
 	k(b)
 	keyLength := b.Len() - offset
